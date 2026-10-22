@@ -261,6 +261,52 @@ export class PokerTable {
     return seat === null ? null : toSeatId(seat);
   }
 
+  get handId(): string {
+    return this.engine.state.handId;
+  }
+
+  get handNumber(): number {
+    return this.engine.state.handNumber;
+  }
+
+  get turnId(): string {
+    return `${this.engine.state.handId}:${this.engine.state.actionHistory.length}`;
+  }
+
+  get isSettled(): boolean {
+    const state = this.engine.state;
+    return state.street === Street.SHOWDOWN && state.winners !== null;
+  }
+
+  /**
+   * Adds chips to the player's pendingAddOn. The library merges this at the
+   * next DEAL, so it is only valid between hands.
+   */
+  addChips(seat: SeatId, amount: number): void {
+    if (!this.isSettled) {
+      throw new TableError("HAND_COMPLETE", "Cannot top up during a hand");
+    }
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new TableError("INVALID_AMOUNT", "Top-up must be a positive safe integer");
+    }
+    const player = this.engine.state.players[seat];
+    if (!player) {
+      throw new TableError("INTERNAL", `No player in seat ${seat}`);
+    }
+    this.engine.act({
+      type: ActionType.ADD_CHIPS,
+      playerId: player.id,
+      amount,
+    });
+  }
+
+  startNextHand(): void {
+    if (!this.isSettled) {
+      throw new TableError("HAND_COMPLETE", "Cannot start the next hand before settlement");
+    }
+    this.engine.deal();
+  }
+
   legalActions(seat: SeatId): LegalActionView | null {
     return deriveLegalActions(this.engine.state, seat);
   }

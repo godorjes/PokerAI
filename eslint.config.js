@@ -3,7 +3,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["node_modules/**", "dist/**", "coverage/**", ".spike/**"],
+    ignores: [
+      "node_modules/**",
+      "dist/**",
+      "coverage/**",
+      ".spike/**",
+      ".next/**",
+      "test-results/**",
+      "playwright-report/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

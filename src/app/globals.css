@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+:root {
+  --felt: #0b4a38;
+  --felt-deep: #06281f;
+  --gold: #f4c76b;
+  --ink: #f7f2e7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(244, 199, 107, 0.14), transparent 32%),
+    radial-gradient(circle at 20% 20%, rgba(42, 125, 96, 0.22), transparent 40%),
+    linear-gradient(160deg, #061914 0%, #0a2b23 55%, #06120f 100%);
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.card-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.9rem;
+  border-radius: 0.35rem;
+  background: #f8f4ea;
+  color: #17231f;
+  font-weight: 800;
+  font-size: 0.95rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  letter-spacing: -0.04em;
+}
+
+.card-red {
+  color: #b21f35;
+}
+
+.card-back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0 4px, transparent 4px 8px), #173f57;
+  color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.poker-table {
+  position: relative;
+  min-height: 540px;
+  border: 14px solid #3a2417;
+  border-radius: 46% / 42%;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.05), transparent 42%),
+    radial-gradient(ellipse at 50% 50%, #126047 0%, var(--felt) 52%, var(--felt-deep) 100%);
+  box-shadow:
+    inset 0 0 0 3px rgba(244, 199, 107, 0.26),
+    inset 0 0 60px rgba(0, 0, 0, 0.35),
+    0 24px 80px rgba(0, 0, 0, 0.42);
+}
+
+.poker-table::after {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border: 1px solid rgba(244, 199, 107, 0.16);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.seat {
+  position: absolute;
+  width: 158px;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.seat-0 {
+  left: 50%;
+  top: 91%;
+}
+
+.seat-1 {
+  left: 14%;
+  top: 72%;
+}
+
+.seat-2 {
+  left: 18%;
+  top: 20%;
+}
+
+.seat-3 {
+  left: 82%;
+  top: 20%;
+}
+
+.seat-4 {
+  left: 86%;
+  top: 72%;
+}
+
+@media (max-width: 720px) {
+  .poker-table {
+    min-height: 470px;
+    border-width: 10px;
+  }
+
+  .seat {
+    width: 126px;
+  }
+
+  .seat-1 {
+    left: 17%;
+  }
+
+  .seat-4 {
+    left: 83%;
+  }
+
+  .card-face {
+    width: 1.7rem;
+    height: 2.35rem;
+    font-size: 0.78rem;
+  }
+}

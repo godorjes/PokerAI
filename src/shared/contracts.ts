@@ -40,13 +40,7 @@ export interface LegalActionView {
 }
 
 export type PlayerStatusName =
-  | "active"
-  | "folded"
-  | "all_in"
-  | "sitting_out"
-  | "waiting"
-  | "busted"
-  | "reserved";
+  "active" | "folded" | "all_in" | "sitting_out" | "waiting" | "busted" | "reserved";
 
 export interface PublicPlayerView {
   readonly seat: SeatId;
@@ -142,12 +136,7 @@ export interface ActionResult {
 }
 
 export type EngineErrorCode =
-  | "NOT_YOUR_TURN"
-  | "INVALID_ACTION"
-  | "NO_CHIPS"
-  | "INVALID_AMOUNT"
-  | "HAND_COMPLETE"
-  | "INTERNAL";
+  "NOT_YOUR_TURN" | "INVALID_ACTION" | "NO_CHIPS" | "INVALID_AMOUNT" | "HAND_COMPLETE" | "INTERNAL";
 
 export class TableError extends Error {
   readonly code: EngineErrorCode;

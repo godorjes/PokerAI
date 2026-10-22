@@ -5,6 +5,10 @@ coverage/
 out/
 .spike/
 .tools/
+.cache/
+test-results/
+playwright-report/
+*.tsbuildinfo
 *.log
 .env
 .env.*

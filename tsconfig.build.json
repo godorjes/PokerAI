@@ -6,7 +6,8 @@
     "rootDir": "src",
     "declaration": true,
     "sourceMap": true,
+    "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src/server", "src/shared"]
 }

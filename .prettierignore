@@ -1,5 +1,8 @@
 node_modules/
 dist/
 coverage/
+.next/
+test-results/
+playwright-report/
 pnpm-lock.yaml
 docs/specs/
