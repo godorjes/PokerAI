@@ -1,0 +1,35 @@
+{
+  "name": "poker-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Poker AI V3.2 — server-authoritative five-seat no-limit Hold'em",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rules": "vitest run tests/rules",
+    "test:contracts": "vitest run tests/contracts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "tsc -p tsconfig.build.json",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@pokertools/engine": "2.1.0",
+    "@pokertools/evaluator": "2.1.0",
+    "@pokertools/types": "2.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^3.2.4"
+  }
+}
