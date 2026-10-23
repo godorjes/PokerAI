@@ -1,11 +1,55 @@
 import type { PokerTable } from "@/server/engine";
-import type { AiMode, BotDecisionResponse, GameStateResponse, TopUpEvent } from "@/shared/api";
+import type {
+  AiMode,
+  BotDecisionResponse,
+  GameStateResponse,
+  LastAiDecisionView,
+  TopUpEvent,
+} from "@/shared/api";
 import type { PlayerId, SeatId } from "@/shared/contracts";
 import type { AsyncMutex } from "./mutex";
 
 export interface LedgerEntry {
   readonly fingerprint: string;
   readonly response: GameStateResponse | BotDecisionResponse;
+}
+
+export interface AiStatsState {
+  requests: number;
+  successes: number;
+  failures: number;
+  rejected: number;
+  retries: number;
+  deepseekActions: number;
+  localNoKeyActions: number;
+  localFallbackActions: number;
+  connectionRequests: number;
+  connectionSuccesses: number;
+  connectionFailures: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  usageUnconfirmed: number;
+}
+
+export function createEmptyAiStats(): AiStatsState {
+  return {
+    requests: 0,
+    successes: 0,
+    failures: 0,
+    rejected: 0,
+    retries: 0,
+    deepseekActions: 0,
+    localNoKeyActions: 0,
+    localFallbackActions: 0,
+    connectionRequests: 0,
+    connectionSuccesses: 0,
+    connectionFailures: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    usageUnconfirmed: 0,
+  };
 }
 
 export interface PendingDecision {
@@ -29,6 +73,8 @@ export interface GameSession {
   stateVersion: number;
   aiMode: AiMode;
   aiEpoch: number;
+  aiStats: AiStatsState;
+  lastDecision: LastAiDecisionView | null;
   pendingDecision: PendingDecision | null;
   createdAt: number;
   lastSeenAt: number;

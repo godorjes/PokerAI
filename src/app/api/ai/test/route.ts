@@ -20,9 +20,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     const ownerId = requireOwner(request);
     const key = deepSeekKeyFrom(request);
     const body = await readJson(request);
-    const input: AiTestRequest = { requestId: requiredString(body, "requestId", 100) };
+    const gameId =
+      typeof body.gameId === "string" && body.gameId.length > 0
+        ? requiredString(body, "gameId")
+        : undefined;
+    const input: AiTestRequest = {
+      requestId: requiredString(body, "requestId", 100),
+      ...(gameId ? { gameId } : {}),
+    };
     return noStore(
-      NextResponse.json(await gameService.testConnection(ownerId, input.requestId, key)),
+      NextResponse.json(
+        await gameService.testConnection(ownerId, input.requestId, key, input.gameId),
+      ),
     );
   } catch (error) {
     return errorResponse(error);

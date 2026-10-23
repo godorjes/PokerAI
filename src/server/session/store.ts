@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PokerTable } from "@/server/engine";
 import { ApiError } from "./errors";
 import { AsyncMutex } from "./mutex";
-import type { GameSession } from "./types";
+import { createEmptyAiStats, type GameSession } from "./types";
 
 export interface GameStoreOptions {
   readonly ttlMs?: number;
@@ -47,6 +47,8 @@ export class GameSessionStore {
       stateVersion: 1,
       aiMode: "disabled",
       aiEpoch: 1,
+      aiStats: createEmptyAiStats(),
+      lastDecision: null,
       pendingDecision: null,
       createdAt: now,
       lastSeenAt: now,

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DEEPSEEK_KEY_HEADER,
   type AiConnectionStatus,
+  type AiDecisionSource,
   type AiModeOperation,
   type AiTestResponse,
   type BotDecisionResponse,
@@ -42,6 +43,12 @@ function storeKey(value: string): void {
     // sessionStorage can be unavailable in hardened/private contexts.
   }
 }
+
+const SOURCE_TEXT: Record<AiDecisionSource, string> = {
+  deepseek: "DeepSeek",
+  local_no_key: "本地（无 Key）",
+  local_fallback: "本地兜底",
+};
 
 const KEY_STATUS_TEXT: Record<KeyStatus, string> = {
   untested: "已保存，未测试",
@@ -142,6 +149,23 @@ function actionText(action: PublicActionView): string {
     all_in: "全下",
   };
   return `${name} ${verb[action.type]}`;
+}
+
+function decisionActionText(action: ActionName, amountTo: number | null): string {
+  switch (action) {
+    case "fold":
+      return "弃牌";
+    case "check":
+      return "过牌";
+    case "call":
+      return "跟注";
+    case "bet":
+      return `下注至 ${formatChips(amountTo ?? 0)}`;
+    case "raise":
+      return `加注至 ${formatChips(amountTo ?? 0)}`;
+    case "all_in":
+      return "全下";
+  }
 }
 
 function seatBadge(seat: SeatId, table: PublicTableView): string | null {
@@ -460,7 +484,10 @@ export default function HomePage() {
       const result = await api<AiTestResponse>("/api/ai/test", {
         method: "POST",
         headers: { [DEEPSEEK_KEY_HEADER]: key },
-        body: JSON.stringify({ requestId: newRequestId() }),
+        body: JSON.stringify({
+          requestId: newRequestId(),
+          ...(game?.gameId ? { gameId: game.gameId } : {}),
+        }),
       });
       setKeyStatus(result.status);
       setKeyMessage(result.message);
@@ -488,7 +515,7 @@ export default function HomePage() {
     } finally {
       setKeyBusy(false);
     }
-  }, [aiKey, changeAiMode, game?.aiMode, storedKey]);
+  }, [aiKey, changeAiMode, game?.aiMode, game?.gameId, storedKey]);
 
   const clearKey = useCallback(async () => {
     storeKey("");
@@ -699,7 +726,7 @@ export default function HomePage() {
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#f4c76b]">
-            Poker AI · Stage C
+            Poker AI · Stage D
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
             五人桌 · 本地 / 智能机器人
@@ -888,6 +915,42 @@ export default function HomePage() {
                 智能模式 epoch {game.aiEpoch}。清除或轮换会使旧响应失效。
               </p>
             ) : null}
+
+            {game.aiStats.requests > 0 ||
+            game.aiStats.connectionRequests > 0 ||
+            game.lastDecision ? (
+              <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-2.5 py-2 text-[10px] leading-5 text-white/45">
+                <div>
+                  本桌模型请求 {game.aiStats.requests} · 成功 {game.aiStats.successes} · 拒绝{" "}
+                  {game.aiStats.rejected} · 降级 {game.aiStats.localFallbackActions} · 重试{" "}
+                  {game.aiStats.retries}
+                </div>
+                {game.aiStats.connectionRequests > 0 ? (
+                  <div>
+                    连接测试 {game.aiStats.connectionRequests} · 成功{" "}
+                    {game.aiStats.connectionSuccesses} · 失败 {game.aiStats.connectionFailures}
+                  </div>
+                ) : null}
+                {game.aiStats.requests > 0 ? (
+                  <div>
+                    tokens{" "}
+                    {game.aiStats.totalTokens > 0
+                      ? `${game.aiStats.totalTokens}（输入 ${game.aiStats.promptTokens} / 输出 ${game.aiStats.completionTokens}）`
+                      : "未确认"}
+                    {game.aiStats.usageUnconfirmed > 0
+                      ? ` · ${game.aiStats.usageUnconfirmed} 次用量未确认`
+                      : ""}
+                  </div>
+                ) : null}
+                {game.lastDecision ? (
+                  <div className="mt-0.5 text-[#f4c76b]/80">
+                    最近动作：{SEAT_NAMES[game.lastDecision.seat]}{" "}
+                    {decisionActionText(game.lastDecision.action, game.lastDecision.amountTo)} ·{" "}
+                    {SOURCE_TEXT[game.lastDecision.source]}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -1017,9 +1080,9 @@ export default function HomePage() {
           <section className="rounded-2xl border border-white/10 bg-black/15 p-4 text-[10px] leading-5 text-white/40">
             <div className="font-semibold text-white/60">当前边界</div>
             <p className="mt-1">
-              阶段 C 已接入按请求传输的 DeepSeek Key、模式/epoch 与 pending
-              控制；真实模型质量/完整输出校验仍属阶段 D。刷新依赖同一 Node
-              进程与未过期会话；服务端重启会要求重新开桌。
+              阶段 D 已接入四牌风模型决策、非思考模式、输出预算、有限重试、校验与用量统计； 真实 API
+              仍需用户提供 Key 后联调。刷新依赖同一 Node 进程与未过期会话；
+              服务端重启会要求重新开桌。
             </p>
           </section>
         </aside>

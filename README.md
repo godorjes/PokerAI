@@ -1,6 +1,6 @@
 # Poker AI V3.2
 
-Server-authoritative five-seat no-limit Texas Hold'em. The current repository implements Stage A rule contracts, the Stage B no-key playable table, and Stage C BYOK/mode/pending-control infrastructure. Real model quality and Stage D decision acceptance are not complete.
+Server-authoritative five-seat no-limit Texas Hold'em. The current repository implements Stage A rule contracts, the Stage B playable table, Stage C BYOK/mode/pending control, and the Stage D four-bot model-decision pipeline. Stage D is verified offline; a real DeepSeek call has not been made without a user Key and budget authorization.
 
 ## Requirements
 
@@ -18,7 +18,7 @@ pnpm dev
 # http://127.0.0.1:3000
 ```
 
-The app starts with four local bots. A DeepSeek Key is optional; if supplied it is kept in the current tab's `sessionStorage` and sent only as a per-request header for `/api/ai/test` and `/api/ai/decision`.
+The app starts with four bots. A DeepSeek Key is optional; if supplied it is kept in the current tab's `sessionStorage` and sent only as a per-request header for `/api/ai/test` and `/api/ai/decision`. In smart mode each bot receives its own style, own cards, public table/action history and legal-action window; thinking is explicitly disabled, output is capped at 800 tokens, and the node deadline is 12 seconds with at most one retry.
 
 A browser refresh restores the game only while the same Node process still holds the in-memory session (30-minute idle TTL). A process restart returns `SESSION_NOT_FOUND` and the UI asks for a new table.
 
@@ -44,7 +44,9 @@ pnpm test:browser   # requires the dev server at 127.0.0.1:3000
 - Settlement, action log, next hand, bot auto top-up, human rebuy.
 - Anonymous HttpOnly cookie ownership; single-process in-memory sessions.
 - Key test/clear/rotate, `aiEpoch`, PendingDecision, duplicate-turn and stale-epoch control.
-- No real DeepSeek request has been made in tests; Stage D still owns prompt/thinking/usage and A01/A02 acceptance.
+- Four bot styles, private-safe decision DTO, JSON/legal/amount validation, local fallback, source tags and token/usage stats.
+- A01/A02/V01 are covered by controlled model doubles; Stage C in-flight/isolation tests are retained.
+- **Real DeepSeek API remains unverified** until the user supplies a Key and an explicit small request budget.
 - No account, database, or real-player multiplayer.
 
 ## API surface
@@ -69,4 +71,5 @@ See:
 - `docs/plans/rule-engine-assessment.md`
 - `docs/plans/stage-b-report.md`
 - `docs/plans/stage-c-report.md`
+- `docs/plans/stage-d-report.md`
 - `docs/progress.md`

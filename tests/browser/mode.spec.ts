@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-test("mode API advances epoch on rotate and can be disabled without a key", async ({ page }) => {
+test("mode API advances epoch on rotate and can be disabled without a key", async ({
+  context,
+  page,
+}) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "五人桌 · 本地 / 智能机器人" })).toBeVisible({
     timeout: 20_000,
@@ -8,7 +11,10 @@ test("mode API advances epoch on rotate and can be disabled without a key", asyn
   const gameId = await page.evaluate(() => localStorage.getItem("poker-ai.gameId"));
   expect(gameId).toBeTruthy();
 
-  const stateResponse = await page.request.get(`/api/game/state?gameId=${gameId}`);
+  // Stop the page's automatic bot loop so the expectedVersion is stable.
+  await page.close();
+
+  const stateResponse = await context.request.get(`/api/game/state?gameId=${gameId}`);
   const state = (await stateResponse.json()) as {
     stateVersion: number;
     aiEpoch: number;
@@ -16,7 +22,7 @@ test("mode API advances epoch on rotate and can be disabled without a key", asyn
   };
   expect(state.aiMode).toBe("disabled");
 
-  const enabledResponse = await page.request.post("/api/ai/mode", {
+  const enabledResponse = await context.request.post("/api/ai/mode", {
     data: {
       gameId,
       expectedVersion: state.stateVersion,
@@ -33,7 +39,7 @@ test("mode API advances epoch on rotate and can be disabled without a key", asyn
   expect(enabled.aiMode).toBe("enabled");
   expect(enabled.aiEpoch).toBeGreaterThan(state.aiEpoch);
 
-  const rotatedResponse = await page.request.post("/api/ai/mode", {
+  const rotatedResponse = await context.request.post("/api/ai/mode", {
     data: {
       gameId,
       expectedVersion: enabled.stateVersion,
@@ -49,7 +55,7 @@ test("mode API advances epoch on rotate and can be disabled without a key", asyn
   expect(rotated.aiMode).toBe("enabled");
   expect(rotated.aiEpoch).toBeGreaterThan(enabled.aiEpoch);
 
-  const disabledResponse = await page.request.post("/api/ai/mode", {
+  const disabledResponse = await context.request.post("/api/ai/mode", {
     data: {
       gameId,
       expectedVersion: rotated.stateVersion,

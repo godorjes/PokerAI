@@ -1,14 +1,6 @@
 import { evaluateStrings } from "@pokertools/evaluator";
-import type { ActionInput, BotDecisionView, LegalActionView, SeatId } from "@/shared/contracts";
-
-type Style = "tight" | "loose" | "balanced" | "adaptive";
-
-const STYLE_BY_SEAT: Record<Exclude<SeatId, 0>, Style> = {
-  1: "tight",
-  2: "loose",
-  3: "balanced",
-  4: "adaptive",
-};
+import type { ActionInput, BotDecisionView, LegalActionView } from "@/shared/contracts";
+import { botStyleForSeat, type BotSeat, type BotStyleId } from "./styles";
 
 const RANK_VALUE: Record<string, number> = {
   "2": 2,
@@ -59,7 +51,7 @@ function postflopStrength(hole: readonly string[], board: readonly string[]): nu
   }
 }
 
-function strengthOf(view: BotDecisionView, style: Style): number {
+function strengthOf(view: BotDecisionView, style: BotStyleId): number {
   const own = view.players[view.selfSeat];
   const hole = (own?.cards ?? []).filter((card): card is string => card !== null);
   const base = view.board.length >= 3 ? postflopStrength(hole, view.board) : preflopStrength(hole);
@@ -83,7 +75,7 @@ function strengthOf(view: BotDecisionView, style: Style): number {
 function chooseAmount(
   legal: LegalActionView,
   action: "bet" | "raise",
-  style: Style,
+  style: BotStyleId,
   pot: number,
 ): ActionInput | null {
   const min = action === "bet" ? legal.minBetTo : legal.minRaiseTo;
@@ -105,7 +97,7 @@ export function decideLocalAction(view: BotDecisionView): ActionInput {
   if (view.selfSeat === 0) {
     throw new Error("decideLocalAction is only for bot seats");
   }
-  const style = STYLE_BY_SEAT[view.selfSeat];
+  const style = botStyleForSeat(view.selfSeat).styleId;
   const legal = view.legalActions;
   const actions = new Set(legal.actions);
   const strength = strengthOf(view, style);
@@ -159,6 +151,6 @@ export function decideLocalAction(view: BotDecisionView): ActionInput {
   throw new Error(`No legal fallback action for seat ${view.selfSeat}`);
 }
 
-export function botStyle(seat: Exclude<SeatId, 0>): Style {
-  return STYLE_BY_SEAT[seat];
+export function botStyle(seat: BotSeat): BotStyleId {
+  return botStyleForSeat(seat).styleId;
 }

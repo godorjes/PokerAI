@@ -2,11 +2,20 @@ import { randomUUID } from "node:crypto";
 import { createPokerTable } from "@/server/engine";
 import type { PokerTable } from "@/server/engine";
 import { decideLocalAction } from "@/server/bot-strategy/local";
+import { botStyleForSeat } from "@/server/bot-strategy/styles";
 import { HttpDeepSeekGateway } from "@/server/ai/http-gateway";
-import type { AiGateway, AiSuggestion } from "@/server/ai/gateway";
+import { buildBotDecisionInput, type BotDecisionInput } from "@/server/ai/bot-input";
+import {
+  DeepSeekGatewayError,
+  type AiGateway,
+  type AiSuggestion,
+  type AiUsage,
+} from "@/server/ai/gateway";
+import { validateSuggestionAgainstInput } from "@/server/ai/validate";
 import { createStageBTestTableIfEnabled } from "./stage-b-test-table";
 import { TableError, type ActionInput, type SeatId } from "@/shared/contracts";
 import type {
+  AiDecisionSource,
   AiModeOperation,
   AiModeRequest,
   AiTestResponse,
@@ -42,7 +51,8 @@ interface PendingReservation {
   readonly kind: "reserved";
   readonly decisionId: string;
   readonly actorSeat: SeatId;
-  readonly view: ReturnType<PokerTable["botView"]>;
+  readonly deadlineAt: number;
+  readonly input: BotDecisionInput;
 }
 
 interface ImmediateDecision {
@@ -88,9 +98,9 @@ export class GameService {
     ownerId: string,
     requestId: string,
     key: string | undefined,
+    gameId?: string,
   ): Promise<AiTestResponse> {
-    // Owner is checked by the route; no session or Key is stored here.
-    void ownerId;
+    const session = gameId ? this.store.get(ownerId, gameId) : null;
     if (!key || key.trim().length === 0) {
       return {
         requestId,
@@ -100,10 +110,16 @@ export class GameService {
       };
     }
 
+    if (session) session.aiStats.connectionRequests += 1;
     try {
       const result = await this.withTimeout(this.testTimeoutMs, (signal) =>
         this.gateway.testConnection(key, signal),
       );
+      if (session) {
+        if (result.status === "available") session.aiStats.connectionSuccesses += 1;
+        else session.aiStats.connectionFailures += 1;
+        this.recordUsage(session, result.usage);
+      }
       return {
         requestId,
         status: result.status,
@@ -111,6 +127,7 @@ export class GameService {
         usage: result.usage,
       };
     } catch {
+      if (session) session.aiStats.connectionFailures += 1;
       return {
         requestId,
         status: "unavailable",
@@ -208,9 +225,13 @@ export class GameService {
         session.pendingDecision = null;
       }
 
+      const style = botStyleForSeat(actor);
+      const input = buildBotDecisionInput(session.table.botView(actor), style);
       const useAi = session.aiMode === "enabled" && Boolean(key?.trim());
       if (!useAi) {
         const action = this.applyLocalAction(session, actor);
+        session.aiStats.localNoKeyActions += 1;
+        this.recordLastDecision(session, actor, action, "local_no_key", null);
         session.stateVersion += 1;
         const response: BotDecisionResponse = {
           ...this.buildState(session),
@@ -223,6 +244,7 @@ export class GameService {
       }
 
       const decisionId = randomUUID();
+      const deadlineAt = now + this.decisionTimeoutMs;
       const pending: PendingDecision = {
         decisionId,
         actorSeat: actor,
@@ -232,7 +254,7 @@ export class GameService {
         expectedVersion: session.stateVersion,
         aiEpoch: session.aiEpoch,
         startedAt: now,
-        deadlineAt: now + this.decisionTimeoutMs,
+        deadlineAt,
         requestId: request.requestId,
       };
       session.pendingDecision = pending;
@@ -240,21 +262,19 @@ export class GameService {
         kind: "reserved",
         decisionId,
         actorSeat: actor,
-        view: session.table.botView(actor),
+        deadlineAt,
+        input,
       };
     });
 
     if (reservation.kind === "immediate") return reservation.response;
 
-    let suggestion: AiSuggestion | null = null;
-    let gatewayFailed = false;
-    try {
-      suggestion = await this.withTimeout(this.decisionTimeoutMs, (signal) =>
-        this.gateway.decide(key!, reservation.view, signal),
-      );
-    } catch {
-      gatewayFailed = true;
-    }
+    const suggestion = await this.requestSuggestion(
+      session,
+      reservation.input,
+      key!,
+      reservation.deadlineAt,
+    );
 
     return session.lock.runExclusive(async () => {
       const pending = session.pendingDecision;
@@ -274,23 +294,33 @@ export class GameService {
       }
 
       let action: ActionInput;
-      let source: "deepseek" | "local_fallback" = "deepseek";
+      let source: AiDecisionSource = "deepseek";
+      let usage: AiUsage | null = null;
 
-      if (suggestion && !gatewayFailed) {
+      if (suggestion) {
         try {
-          action = { action: suggestion.action, amountTo: suggestion.amountTo };
-          session.table.act(pending.actorSeat, action);
+          const validated = validateSuggestionAgainstInput(reservation.input, suggestion);
+          session.table.act(pending.actorSeat, validated);
+          action = validated;
+          source = "deepseek";
+          usage = suggestion.usage ?? null;
+          session.aiStats.successes += 1;
+          session.aiStats.deepseekActions += 1;
         } catch {
+          session.aiStats.rejected += 1;
           source = "local_fallback";
+          session.aiStats.localFallbackActions += 1;
           action = this.applyLocalAction(session, pending.actorSeat);
         }
       } else {
         source = "local_fallback";
+        session.aiStats.localFallbackActions += 1;
         action = this.applyLocalAction(session, pending.actorSeat);
       }
 
       session.pendingDecision = null;
       session.stateVersion += 1;
+      this.recordLastDecision(session, pending.actorSeat, action, source, usage);
       const response: BotDecisionResponse = {
         ...this.buildState(session),
         status: "committed",
@@ -353,6 +383,7 @@ export class GameService {
     }
 
     session.pendingDecision = null;
+    session.lastDecision = null;
     session.stateVersion += 1;
     session.topUps.push(...topUps);
     if (session.topUps.length > 20) session.topUps.splice(0, session.topUps.length - 20);
@@ -361,12 +392,78 @@ export class GameService {
     return response;
   }
 
+  private async requestSuggestion(
+    session: GameSession,
+    input: BotDecisionInput,
+    key: string,
+    deadlineAt: number,
+  ): Promise<AiSuggestion | null> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const remaining = deadlineAt - this.now();
+      if (remaining <= 0) return null;
+      if (attempt > 0) session.aiStats.retries += 1;
+
+      session.aiStats.requests += 1;
+      try {
+        const suggestion = await this.withTimeout(remaining, (signal) =>
+          this.gateway.decide(key, input, signal),
+        );
+        this.recordUsage(session, suggestion.usage ?? null);
+        return suggestion;
+      } catch (error) {
+        session.aiStats.failures += 1;
+        if (!(error instanceof DeepSeekGatewayError) || !error.retryable) {
+          return null;
+        }
+        if (attempt >= 1) return null;
+      }
+    }
+    return null;
+  }
+
+  private recordUsage(session: GameSession, usage: AiUsage | null): void {
+    if (!usage) {
+      session.aiStats.usageUnconfirmed += 1;
+      return;
+    }
+    session.aiStats.promptTokens += usage.promptTokens;
+    session.aiStats.completionTokens += usage.completionTokens;
+    session.aiStats.totalTokens += usage.totalTokens;
+  }
+
+  private recordLastDecision(
+    session: GameSession,
+    seat: SeatId,
+    action: ActionInput,
+    source: AiDecisionSource,
+    usage: AiUsage | null,
+  ): void {
+    const player = session.table.publicView(0).players[seat];
+    if (!player) return;
+    session.lastDecision = {
+      seat,
+      playerId: player.playerId,
+      action: action.action,
+      amountTo: action.amountTo,
+      source,
+      at: this.now(),
+      usage: usage
+        ? {
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            totalTokens: usage.totalTokens,
+          }
+        : null,
+    };
+  }
+
   private applyLocalAction(session: GameSession, actor: SeatId): ActionInput {
     try {
       const action = decideLocalAction(session.table.botView(actor));
       session.table.act(actor, action);
       return action;
     } catch (error) {
+      session.pendingDecision = null;
       throw this.mapTableError(error);
     }
   }
@@ -387,6 +484,10 @@ export class GameService {
       humanPlayerId: "human",
       aiMode: session.aiMode,
       aiEpoch: session.aiEpoch,
+      aiStats: { ...session.aiStats },
+      lastDecision: session.lastDecision
+        ? { ...session.lastDecision, usage: session.lastDecision.usage }
+        : null,
       pendingDecision: this.pendingView(session),
       table,
       canStartNextHand: settled,

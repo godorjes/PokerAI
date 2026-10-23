@@ -6,6 +6,40 @@ export type GamePhase = "playing" | "settled";
 export type AiMode = "disabled" | "enabled";
 export type AiDecisionSource = "deepseek" | "local_no_key" | "local_fallback";
 
+export interface AiTokenUsage {
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly totalTokens: number;
+}
+
+export interface AiDecisionStats {
+  readonly requests: number;
+  readonly successes: number;
+  readonly failures: number;
+  readonly rejected: number;
+  readonly retries: number;
+  readonly deepseekActions: number;
+  readonly localNoKeyActions: number;
+  readonly localFallbackActions: number;
+  readonly connectionRequests: number;
+  readonly connectionSuccesses: number;
+  readonly connectionFailures: number;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly totalTokens: number;
+  readonly usageUnconfirmed: number;
+}
+
+export interface LastAiDecisionView {
+  readonly seat: SeatId;
+  readonly playerId: PlayerId;
+  readonly action: ActionName;
+  readonly amountTo: number | null;
+  readonly source: AiDecisionSource;
+  readonly at: number;
+  readonly usage: AiTokenUsage | null;
+}
+
 export interface PendingDecisionView {
   readonly decisionId: string;
   readonly actorId: PlayerId;
@@ -33,6 +67,8 @@ export interface GameStateResponse {
   readonly humanPlayerId: PlayerId;
   readonly aiMode: AiMode;
   readonly aiEpoch: number;
+  readonly aiStats: AiDecisionStats;
+  readonly lastDecision: LastAiDecisionView | null;
   readonly pendingDecision: PendingDecisionView | null;
   readonly table: PublicTableView;
   readonly canStartNextHand: boolean;
@@ -88,6 +124,8 @@ export interface AiModeRequest {
 
 export interface AiTestRequest {
   readonly requestId: string;
+  /** Optional current session for connection-test fee/request accounting. */
+  readonly gameId?: string;
 }
 
 export type AiConnectionStatus =
@@ -102,10 +140,7 @@ export interface AiTestResponse {
   readonly requestId: string;
   readonly status: AiConnectionStatus;
   readonly message: string;
-  readonly usage: {
-    readonly promptTokens?: number;
-    readonly completionTokens?: number;
-  } | null;
+  readonly usage: AiTokenUsage | null;
 }
 
 export interface ApiErrorBody {
