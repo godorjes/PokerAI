@@ -2,7 +2,7 @@
   "name": "poker-ai",
   "version": "0.1.0",
   "private": true,
-  "description": "Poker AI V3.2 — server-authoritative five-seat no-limit Hold'em",
+  "description": "Poker AI V3.2 — 本地德州扑克与 AI 五人桌（Next.js + TypeScript，DeepSeek BYOK）",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "engines": {

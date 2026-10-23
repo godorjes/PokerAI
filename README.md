@@ -1,4 +1,25 @@
-# Poker AI V3.2
+# Poker AI V3.2 · 本地德州扑克与 AI 五人桌
+
+## 中文简介
+
+**Poker AI V3.2** 是一个可以在自己电脑上运行的五人桌无限注**德州扑克与 AI**实验项目。它把服务端裁决的牌桌、四名不同牌风的机器人、DeepSeek BYOK 决策、并发控制和公开行动解读放在同一个可运行项目里，适合想研究 **AI 德州扑克**、**本地德州扑克**或**德州扑克与 AI 工程实践**的开发者、学习者和扑克爱好者。
+
+如果你在搜索 **本地德州扑克**、**单机德州扑克**、**德州扑克 AI**、**AI 德州扑克**、**DeepSeek 德州扑克**、**浏览器德州扑克**或“德州扑克与 AI 怎么结合”，这个仓库覆盖了从规则、机器人、模型校验到浏览器验收的完整本地链路。
+
+- **无需 Key 可玩**：默认由四名本地策略机器人行动，不依赖云端账号。
+- **自带 DeepSeek Key**：填入自己的 Key 后可启用智能决策；Key 只存在当前标签页 `sessionStorage`，按请求转发。
+- **四牌风机器人**：紧弱、松凶、均衡、观察适应，各自拥有独立决策视图。
+- **不是“只写一段解释”**：模型建议需要通过 JSON、金额、合法动作校验，实际提交动作后才标记来源；失败会本地降级。
+- **公开行动解读**：机器人已提交动作后可点“思路”，只读取动作发生时的公开快照，不读取底牌或私有摘要。
+- **可验证的工程边界**：服务端权威状态、匿名 HttpOnly Cookie、PendingDecision、`aiEpoch`、幂等、超时与有限重试、请求/usage 统计。
+
+> **当前是本地验收版本，不是已上线的线上产品。** 真实 DeepSeek API 尚未联调验证，没有真实请求和 usage 数据；不能把离线测试当成已连通。公开部署和真实小额联调是单独操作。
+
+更多中文介绍、GitHub About/Topics 文案和检索词说明见 [docs/project-description.md](docs/project-description.md)。
+
+![公开行动解读](docs/evidence/stage-e-insight.png)
+
+## English Overview
 
 Server-authoritative five-seat no-limit Texas Hold'em. The repository implements Stage A rule contracts, the Stage B playable table, Stage C BYOK/mode/pending control, the Stage D four-bot model-decision pipeline, and Stage E public action insight plus delivery checks. Stage D is verified offline; a real DeepSeek call has not been made without a user Key and budget authorization.
 
@@ -10,7 +31,9 @@ Server-authoritative five-seat no-limit Texas Hold'em. The repository implements
 
 The current runtime must use Node 24.21.0 or another version satisfying the engine range. A PATH Node 21 is not sufficient.
 
-## Start
+## Start / 启动
+
+中文运行提示：安装依赖后执行 `pnpm dev`，打开 `http://127.0.0.1:3000`。默认本地模式，不需要 DeepSeek Key。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -89,4 +112,5 @@ See:
 - `docs/plans/stage-e-report.md`
 - `docs/acceptance-matrix.md`
 - `docs/deployment.md`
+- `docs/project-description.md`（中文项目描述、GitHub About/Topics 与检索说明）
 - `docs/progress.md`
