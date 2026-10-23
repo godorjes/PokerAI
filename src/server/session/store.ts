@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PokerTable } from "@/server/engine";
 import { ApiError } from "./errors";
+import { AsyncMutex } from "./mutex";
 import type { GameSession } from "./types";
 
 export interface GameStoreOptions {
@@ -42,7 +43,11 @@ export class GameSessionStore {
       gameId: randomUUID(),
       ownerId,
       table,
+      lock: new AsyncMutex(),
       stateVersion: 1,
+      aiMode: "disabled",
+      aiEpoch: 1,
+      pendingDecision: null,
       createdAt: now,
       lastSeenAt: now,
       requestLedger: new Map(),

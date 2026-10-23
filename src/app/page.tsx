@@ -1,11 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  BotDecisionResponse,
-  GameActionRequest,
-  GameStateResponse,
-  NextHandRequest,
+import {
+  DEEPSEEK_KEY_HEADER,
+  type AiConnectionStatus,
+  type AiModeOperation,
+  type AiTestResponse,
+  type BotDecisionResponse,
+  type GameActionRequest,
+  type GameStateResponse,
+  type NextHandRequest,
 } from "@/shared/api";
 import type {
   ActionName,
@@ -17,6 +21,40 @@ import type {
 } from "@/shared/contracts";
 
 const STORAGE_KEY = "poker-ai.gameId";
+const KEY_STORAGE = "poker-ai.deepseek-key";
+
+type KeyStatus = AiConnectionStatus | "untested" | "testing" | "unconfirmed";
+
+function readStoredKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return sessionStorage.getItem(KEY_STORAGE) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeKey(value: string): void {
+  try {
+    if (value) sessionStorage.setItem(KEY_STORAGE, value);
+    else sessionStorage.removeItem(KEY_STORAGE);
+  } catch {
+    // sessionStorage can be unavailable in hardened/private contexts.
+  }
+}
+
+const KEY_STATUS_TEXT: Record<KeyStatus, string> = {
+  untested: "已保存，未测试",
+  testing: "正在测试连接…",
+  available: "连接可用",
+  key_invalid: "Key 无效",
+  insufficient_balance: "余额不足",
+  rate_limited: "请求限流",
+  unavailable: "暂时不可用",
+  not_configured: "未配置",
+  unconfirmed: "本地已清除，服务端停用未确认",
+};
+
 const SEAT_NAMES: Record<SeatId, string> = {
   0: "你",
   1: "AI-1 · 紧弱",
@@ -280,8 +318,24 @@ export default function HomePage() {
   const [expired, setExpired] = useState(false);
   const [amount, setAmount] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [aiKey, setAiKey] = useState("");
+  const [storedKey, setStoredKey] = useState("");
+  const [keyStatus, setKeyStatus] = useState<KeyStatus>("not_configured");
+  const [keyLoaded, setKeyLoaded] = useState(false);
+  const [keyMessage, setKeyMessage] = useState<string | null>(null);
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [modeBusy, setModeBusy] = useState(false);
   const booted = useRef(false);
   const botGuard = useRef<string | null>(null);
+  const modeInFlight = useRef(false);
+
+  useEffect(() => {
+    const stored = readStoredKey();
+    setAiKey(stored);
+    setStoredKey(stored);
+    setKeyStatus(stored ? "untested" : "not_configured");
+    setKeyLoaded(true);
+  }, []);
 
   const reportError = useCallback((caught: unknown) => {
     if (caught instanceof ClientApiError) {
@@ -356,10 +410,139 @@ export default function HomePage() {
     setAmount(suggested > 0 ? String(suggested) : "");
   }, [game?.gameId, game?.turnId]);
 
+  const changeAiMode = useCallback(
+    async (operation: AiModeOperation): Promise<boolean> => {
+      if (!game || modeInFlight.current) return false;
+      if (operation === "enable" && keyStatus !== "available") {
+        setKeyMessage("请先保存并测试 Key");
+        return false;
+      }
+      modeInFlight.current = true;
+      setModeBusy(true);
+      setKeyMessage(null);
+      try {
+        const data = await api<GameStateResponse>("/api/ai/mode", {
+          method: "POST",
+          body: JSON.stringify({
+            gameId: game.gameId,
+            expectedVersion: game.stateVersion,
+            requestId: newRequestId(),
+            operation,
+          }),
+        });
+        setGame(data);
+        setError(null);
+        if (operation === "enable") setNotice("智能模式已启用");
+        if (operation === "rotate") setNotice("Key 已轮换，aiEpoch 已推进");
+        return true;
+      } catch (caught) {
+        reportError(caught);
+        return false;
+      } finally {
+        modeInFlight.current = false;
+        setModeBusy(false);
+      }
+    },
+    [game, keyStatus, reportError],
+  );
+
+  const saveAndTestKey = useCallback(async () => {
+    const key = aiKey.trim();
+    if (!key) {
+      setKeyStatus("not_configured");
+      setKeyMessage("请输入 Key");
+      return;
+    }
+    setKeyBusy(true);
+    setKeyStatus("testing");
+    setKeyMessage("正在连接 DeepSeek…");
+    try {
+      const result = await api<AiTestResponse>("/api/ai/test", {
+        method: "POST",
+        headers: { [DEEPSEEK_KEY_HEADER]: key },
+        body: JSON.stringify({ requestId: newRequestId() }),
+      });
+      setKeyStatus(result.status);
+      setKeyMessage(result.message);
+      if (result.status === "available") {
+        if (game?.aiMode === "enabled" && storedKey !== key) {
+          const rotated = await changeAiMode("rotate");
+          if (!rotated) {
+            setKeyMessage("新 Key 已验证，但 aiEpoch 轮换未确认；旧 Key 仍为当前 Key");
+            return;
+          }
+        }
+        storeKey(key);
+        setStoredKey(key);
+      } else {
+        storeKey("");
+        setStoredKey("");
+      }
+    } catch (caught) {
+      storeKey("");
+      setStoredKey("");
+      setKeyStatus("unavailable");
+      setKeyMessage(
+        caught instanceof ClientApiError ? `${caught.code}: ${caught.message}` : "连接测试失败",
+      );
+    } finally {
+      setKeyBusy(false);
+    }
+  }, [aiKey, changeAiMode, game?.aiMode, storedKey]);
+
+  const clearKey = useCallback(async () => {
+    storeKey("");
+    setAiKey("");
+    setStoredKey("");
+    setKeyStatus("not_configured");
+    setKeyMessage("本地 Key 已清除");
+    botGuard.current = null;
+    if (game?.aiMode === "enabled") {
+      if (modeInFlight.current) {
+        setKeyMessage("本地已清除，正在等待服务端停用确认");
+        return;
+      }
+      const confirmed = await changeAiMode("disable");
+      if (!confirmed) {
+        setKeyStatus("unconfirmed");
+        setKeyMessage("本地已清除，服务端停用尚未确认");
+      }
+    }
+  }, [changeAiMode, game?.aiMode]);
+
+  const autoDisableGuard = useRef<string | null>(null);
   useEffect(() => {
-    if (!game || game.phase !== "playing") return;
+    if (!keyLoaded || !game || game.aiMode !== "enabled" || storedKey.trim() || modeBusy) return;
+    const key = `${game.gameId}:${game.aiEpoch}`;
+    if (autoDisableGuard.current === key) return;
+    autoDisableGuard.current = key;
+    void changeAiMode("disable");
+  }, [keyLoaded, storedKey, changeAiMode, game, modeBusy]);
+
+  useEffect(() => {
+    if (!game?.pendingDecision) return;
+    let cancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const data = await api<GameStateResponse>(
+          `/api/game/state?gameId=${encodeURIComponent(game.gameId)}`,
+        );
+        if (!cancelled) setGame(data);
+      } catch {
+        // The next poll or a mode change will settle the state.
+      }
+    }, 700);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [game?.gameId, game?.pendingDecision?.decisionId]);
+
+  useEffect(() => {
+    if (!keyLoaded || !game || game.phase !== "playing" || game.pendingDecision) return;
     const seat = game.table.actionToSeat;
     if (seat === null || seat === 0) return;
+    if (game.aiMode === "enabled" && !storedKey.trim()) return;
 
     const key = `${game.gameId}:${game.turnId}`;
     if (botGuard.current === key) return;
@@ -370,12 +553,17 @@ export default function HomePage() {
       try {
         const data = await api<BotDecisionResponse>("/api/ai/decision", {
           method: "POST",
+          headers:
+            game.aiMode === "enabled" && storedKey.trim()
+              ? { [DEEPSEEK_KEY_HEADER]: storedKey.trim() }
+              : undefined,
           body: JSON.stringify({
             gameId: game.gameId,
             handId: game.handId,
             turnId: game.turnId,
             expectedVersion: game.stateVersion,
             requestId: newRequestId(),
+            aiEpoch: game.aiEpoch,
           }),
         });
         if (botGuard.current === key) {
@@ -393,7 +581,7 @@ export default function HomePage() {
     // effect setup/cleanup/setup in development, and cancelling the first
     // request while keeping the turn guard would leave the table stuck.
     void run();
-  }, [game, reportError]);
+  }, [storedKey, keyLoaded, game, reportError]);
 
   const refresh = useCallback(async () => {
     if (!game) return;
@@ -511,19 +699,24 @@ export default function HomePage() {
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#f4c76b]">
-            Poker AI · Stage B
+            Poker AI · Stage C
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-            五人桌 · 本地机器人
+            五人桌 · 本地 / 智能机器人
           </h1>
           <p className="mt-1 text-xs text-white/45">
-            5/10 盲注 · 1,000 起始筹码 · 服务端裁决 · 无需 DeepSeek Key
+            5/10 盲注 · 1,000 起始筹码 · 服务端裁决 · 智能模式需自带 DeepSeek Key
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-[#f4c76b]/30 bg-[#f4c76b]/10 px-3 py-1.5 text-[10px] font-semibold text-[#f4c76b]">
-            {game.aiMode === "disabled" ? "基础策略" : game.aiMode}
+            {game.aiMode === "disabled" ? "基础策略" : `智能模式 · e${game.aiEpoch}`}
           </span>
+          {game.pendingDecision ? (
+            <span className="rounded-full border border-sky-300/25 bg-sky-400/10 px-3 py-1.5 text-[10px] text-sky-200">
+              AI 思考中
+            </span>
+          ) : null}
           <span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-white/45">
             第 {table.handNumber} 手 · v{game.stateVersion}
           </span>
@@ -589,9 +782,11 @@ export default function HomePage() {
             </div>
             {game.phase === "playing" && table.actionToSeat !== null ? (
               <div className="mt-3 text-[11px] text-white/55">
-                {table.actionToSeat === 0
-                  ? "轮到你行动"
-                  : `${SEAT_NAMES[table.actionToSeat]} 思考中…`}
+                {game.pendingDecision
+                  ? "AI 正在思考…"
+                  : table.actionToSeat === 0
+                    ? "轮到你行动"
+                    : `${SEAT_NAMES[table.actionToSeat]} 思考中…`}
               </div>
             ) : null}
           </div>
@@ -608,11 +803,102 @@ export default function HomePage() {
         </section>
 
         <aside className="space-y-4">
+          <section className="rounded-2xl border border-[#8ec5ff]/20 bg-[#0a2334]/45 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-bold text-white/85">DeepSeek Key</h2>
+                <p className="mt-1 text-[10px] leading-4 text-white/40">
+                  只存当前标签页 sessionStorage；测试会请求 DeepSeek，可能产生少量用量。
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[9px] text-white/60">
+                {KEY_STATUS_TEXT[keyStatus]}
+              </span>
+            </div>
+
+            <input
+              type="password"
+              value={aiKey}
+              onChange={(event) => {
+                setAiKey(event.target.value);
+                setKeyStatus(event.target.value.trim() ? "untested" : "not_configured");
+                setKeyMessage(null);
+              }}
+              placeholder="sk-…"
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-3 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white placeholder:text-white/25"
+            />
+
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                disabled={keyBusy || !aiKey.trim()}
+                onClick={() => void saveAndTestKey()}
+                className="rounded-lg bg-[#8ec5ff] px-2.5 py-1.5 text-[10px] font-bold text-[#10202b] disabled:opacity-35"
+              >
+                {keyBusy ? "测试中…" : "保存并测试"}
+              </button>
+
+              {game.aiMode === "disabled" ? (
+                <button
+                  type="button"
+                  disabled={keyStatus !== "available" || modeBusy || keyBusy}
+                  onClick={() => void changeAiMode("enable")}
+                  className="rounded-lg border border-emerald-300/30 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-200 disabled:opacity-30"
+                >
+                  启用智能
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={modeBusy || keyStatus !== "available" || keyBusy}
+                    onClick={() => void changeAiMode("rotate")}
+                    className="rounded-lg border border-[#f4c76b]/30 px-2.5 py-1.5 text-[10px] font-semibold text-[#f4c76b] disabled:opacity-30"
+                  >
+                    轮换 Key
+                  </button>
+                  <button
+                    type="button"
+                    disabled={modeBusy}
+                    onClick={() => void changeAiMode("disable")}
+                    className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[10px] font-semibold text-white/65 disabled:opacity-30"
+                  >
+                    停用智能
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                disabled={!storedKey && game.aiMode === "disabled"}
+                onClick={() => void clearKey()}
+                className="rounded-lg border border-rose-300/20 px-2.5 py-1.5 text-[10px] font-semibold text-rose-200/80 disabled:opacity-25"
+              >
+                清除 Key
+              </button>
+            </div>
+
+            {keyMessage ? (
+              <p className="mt-2 text-[10px] leading-4 text-white/45">{keyMessage}</p>
+            ) : null}
+            {game.aiMode === "enabled" ? (
+              <p className="mt-2 text-[10px] leading-4 text-[#f4c76b]/70">
+                智能模式 epoch {game.aiEpoch}。清除或轮换会使旧响应失效。
+              </p>
+            ) : null}
+          </section>
+
           <section className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-white/85">行动</h2>
               <span className="text-[10px] text-white/35">
-                {isHumanTurn ? `跟注成本 ${formatChips(callCost)}` : "等待"}
+                {game.pendingDecision
+                  ? "AI 决策中"
+                  : isHumanTurn
+                    ? `跟注成本 ${formatChips(callCost)}`
+                    : "等待"}
               </span>
             </div>
 
@@ -692,7 +978,11 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <p className="mt-4 text-xs leading-5 text-white/40">
-                    {game.phase === "playing" ? "机器人按行动顺序自动推进。" : "等待结算。"}
+                    {game.pendingDecision
+                      ? "正在等待当前 AI 决策提交；刷新会先同步，不会新建同一回合的决策。"
+                      : game.phase === "playing"
+                        ? "机器人按行动顺序自动推进。"
+                        : "等待结算。"}
                   </p>
                 )}
               </>
@@ -727,7 +1017,8 @@ export default function HomePage() {
           <section className="rounded-2xl border border-white/10 bg-black/15 p-4 text-[10px] leading-5 text-white/40">
             <div className="font-semibold text-white/60">当前边界</div>
             <p className="mt-1">
-              阶段 B 仅使用本地基础策略，未接入 DeepSeek。刷新依赖同一 Node
+              阶段 C 已接入按请求传输的 DeepSeek Key、模式/epoch 与 pending
+              控制；真实模型质量/完整输出校验仍属阶段 D。刷新依赖同一 Node
               进程与未过期会话；服务端重启会要求重新开桌。
             </p>
           </section>

@@ -64,18 +64,19 @@ function chooseHumanAction(state: GameStateResponse): ActionName {
   return "fold";
 }
 
-function botDecision(
+async function botDecision(
   service: GameService,
   owner: string,
   state: GameStateResponse,
   id: number,
-): GameStateResponse {
+): Promise<GameStateResponse> {
   return service.botDecision(owner, {
     gameId: state.gameId,
     handId: state.handId,
     turnId: state.turnId,
     expectedVersion: state.stateVersion,
     requestId: requestId(id),
+    aiEpoch: state.aiEpoch,
   });
 }
 
@@ -119,7 +120,7 @@ describe("Stage B session service", () => {
     expectApiError(() => restarted.get("owner-a", started.gameId), "SESSION_NOT_FOUND", 404);
   });
 
-  it("plays through the local bot path and exposes only the human view", () => {
+  it("plays through the local bot path and exposes only the human view", async () => {
     const service = new GameService(new GameSessionStore(), factory());
     let state = service.start("owner-a");
     let counter = 1;
@@ -130,7 +131,7 @@ describe("Stage B session service", () => {
       state =
         seat === 0
           ? humanAction(service, "owner-a", state, chooseHumanAction(state), counter++)
-          : botDecision(service, "owner-a", state, counter++);
+          : await botDecision(service, "owner-a", state, counter++);
     }
 
     expect(state.phase).toBe("settled");
@@ -141,7 +142,7 @@ describe("Stage B session service", () => {
     expect(JSON.stringify(state)).not.toContain('"previousStates"');
   });
 
-  it("requires a human rebuy and auto-tops up a busted bot between hands (G10)", () => {
+  it("requires a human rebuy and auto-tops up a busted bot between hands (G10)", async () => {
     const service = new GameService(new GameSessionStore(), factory([1, 1, 1000, 1000, 1000]));
     let state = service.start("owner-a");
     let counter = 1;
@@ -152,7 +153,7 @@ describe("Stage B session service", () => {
       if (seat === 0) {
         state = humanAction(service, "owner-a", state, chooseHumanAction(state), counter++);
       } else {
-        state = botDecision(service, "owner-a", state, counter++);
+        state = await botDecision(service, "owner-a", state, counter++);
       }
     }
 

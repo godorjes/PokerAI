@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { GameService } from "@/server/session/service";
 import { ApiError } from "@/server/session/errors";
+import { DEEPSEEK_KEY_HEADER } from "@/shared/api";
 
 export const OWNER_COOKIE = "poker_owner";
 // The identity cookie may outlive an idle game session. The server-side
@@ -112,6 +113,23 @@ export function requiredVersion(body: Record<string, unknown>): number {
     throw new ApiError(400, "INVALID_REQUEST", "expectedVersion must be a positive integer");
   }
   return value as number;
+}
+
+export function requiredPositiveInteger(body: Record<string, unknown>, key: string): number {
+  const value = body[key];
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new ApiError(400, "INVALID_REQUEST", `${key} must be a positive integer`);
+  }
+  return value as number;
+}
+
+export function deepSeekKeyFrom(request: Request): string | undefined {
+  const key = request.headers.get(DEEPSEEK_KEY_HEADER);
+  if (key === null) return undefined;
+  if (key.length > 512) {
+    throw new ApiError(400, "INVALID_REQUEST", "API key header is too long");
+  }
+  return key;
 }
 
 export function optionalBoolean(body: Record<string, unknown>, key: string): boolean {

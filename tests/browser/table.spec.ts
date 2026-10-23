@@ -1,18 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function waitForHumanOrSettlement(page: Page): Promise<"human" | "settled"> {
+  let result: "human" | "settled" | "waiting" = "waiting";
   await expect
     .poll(
       async () => {
-        if ((await page.getByText("本手已结算").count()) > 0) return "settled";
+        const bodyText = await page.locator("body").innerText();
+        if (bodyText.includes("本手已结算")) {
+          result = "settled";
+          return "settled";
+        }
         const fold = page.getByRole("button", { name: "弃牌" });
-        if ((await fold.count()) > 0 && (await fold.isEnabled())) return "human";
+        if ((await fold.count()) > 0 && (await fold.isEnabled())) {
+          result = "human";
+          return "human";
+        }
         return "waiting";
       },
-      { timeout: 20_000 },
+      { timeout: 30_000, intervals: [100, 200, 500] },
     )
     .not.toBe("waiting");
-  return (await page.getByText("本手已结算").count()) > 0 ? "settled" : "human";
+  if (result === "waiting") throw new Error("Neither human turn nor settlement was observed");
+  return result;
 }
 
 async function finishHandByFolding(page: Page): Promise<void> {
@@ -32,7 +41,7 @@ async function startNextHand(page: Page): Promise<void> {
 
 test("plays three hands, folds early, and recovers after refresh", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "五人桌 · 本地机器人" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "五人桌 · 本地 / 智能机器人" })).toBeVisible({
     timeout: 20_000,
   });
 
@@ -55,7 +64,7 @@ test("plays three hands, folds early, and recovers after refresh", async ({ page
 
   // Refresh must recover the same server-owned game, not create a new one.
   await page.reload();
-  await expect(page.getByRole("heading", { name: "五人桌 · 本地机器人" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "五人桌 · 本地 / 智能机器人" })).toBeVisible({
     timeout: 20_000,
   });
   expect(await page.evaluate(() => localStorage.getItem("poker-ai.gameId"))).toBe(gameId);

@@ -510,6 +510,8 @@ DTO 用显式字段映射，禁止 `{...state}` 后删字段。
 - 可控上游替身（延迟/失败/并发）可用；不依赖真实 Key。
 - 同源/CSRF/Cookie 已落地。
 
+> 执行记录（2026-10-22）：Stage C 已完成；使用 FakeGateway 覆盖 A03/A04/K01/K03，真实 DeepSeek 调用 0 次。Stage D 仍需真实提示词、thinking、usage 与 A01/A02。详见 `docs/plans/stage-c-report.md`。
+
 ### 7.2 产物
 
 1. `sessionStorage` 临时 Key 设置、用户主动“保存并测试”、清除、状态提示。

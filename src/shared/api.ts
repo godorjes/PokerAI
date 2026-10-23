@@ -1,7 +1,17 @@
 import type { ActionInput, ActionName, PlayerId, PublicTableView, SeatId } from "./contracts";
 
+export const DEEPSEEK_KEY_HEADER = "x-deepseek-api-key";
+
 export type GamePhase = "playing" | "settled";
-export type AiMode = "disabled";
+export type AiMode = "disabled" | "enabled";
+export type AiDecisionSource = "deepseek" | "local_no_key" | "local_fallback";
+
+export interface PendingDecisionView {
+  readonly decisionId: string;
+  readonly actorId: PlayerId;
+  readonly turnId: string;
+  readonly deadlineAt: number;
+}
 
 export interface TopUpEvent {
   readonly seat: SeatId;
@@ -22,6 +32,8 @@ export interface GameStateResponse {
   readonly humanSeat: SeatId;
   readonly humanPlayerId: PlayerId;
   readonly aiMode: AiMode;
+  readonly aiEpoch: number;
+  readonly pendingDecision: PendingDecisionView | null;
   readonly table: PublicTableView;
   readonly canStartNextHand: boolean;
   readonly rebuyRequired: boolean;
@@ -29,8 +41,9 @@ export interface GameStateResponse {
 }
 
 export interface BotDecisionResponse extends GameStateResponse {
-  readonly action: ActionInput;
-  readonly source: "local_no_key";
+  readonly status: "committed" | "pending";
+  readonly action?: ActionInput;
+  readonly source?: AiDecisionSource;
 }
 
 export interface StartGameRequest {
@@ -61,6 +74,38 @@ export interface BotDecisionRequest {
   readonly turnId: string;
   readonly expectedVersion: number;
   readonly requestId: string;
+  readonly aiEpoch: number;
+}
+
+export type AiModeOperation = "enable" | "disable" | "rotate";
+
+export interface AiModeRequest {
+  readonly gameId: string;
+  readonly expectedVersion: number;
+  readonly requestId: string;
+  readonly operation: AiModeOperation;
+}
+
+export interface AiTestRequest {
+  readonly requestId: string;
+}
+
+export type AiConnectionStatus =
+  | "available"
+  | "key_invalid"
+  | "insufficient_balance"
+  | "rate_limited"
+  | "unavailable"
+  | "not_configured";
+
+export interface AiTestResponse {
+  readonly requestId: string;
+  readonly status: AiConnectionStatus;
+  readonly message: string;
+  readonly usage: {
+    readonly promptTokens?: number;
+    readonly completionTokens?: number;
+  } | null;
 }
 
 export interface ApiErrorBody {

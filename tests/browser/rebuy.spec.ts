@@ -9,7 +9,7 @@ test("human busts, sees the rebuy action, and starts the next hand with chips", 
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "五人桌 · 本地机器人" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "五人桌 · 本地 / 智能机器人" })).toBeVisible({
     timeout: 20_000,
   });
 

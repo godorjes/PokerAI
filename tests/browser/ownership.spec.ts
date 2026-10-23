@@ -1,17 +1,17 @@
 import { expect, test } from "@playwright/test";
 
-test("rejects another anonymous owner on every Stage B game endpoint", async ({ browser }) => {
+test("rejects another anonymous owner on every current game/AI endpoint", async ({ browser }) => {
   const contextA = await browser.newContext();
   const pageA = await contextA.newPage();
   await pageA.goto("/");
-  await expect(pageA.getByRole("heading", { name: "五人桌 · 本地机器人" })).toBeVisible();
+  await expect(pageA.getByRole("heading", { name: "五人桌 · 本地 / 智能机器人" })).toBeVisible();
   const gameA = await pageA.evaluate(() => localStorage.getItem("poker-ai.gameId"));
   expect(gameA).toBeTruthy();
 
   const contextB = await browser.newContext();
   const pageB = await contextB.newPage();
   await pageB.goto("/");
-  await expect(pageB.getByRole("heading", { name: "五人桌 · 本地机器人" })).toBeVisible();
+  await expect(pageB.getByRole("heading", { name: "五人桌 · 本地 / 智能机器人" })).toBeVisible();
   const gameB = await pageB.evaluate(() => localStorage.getItem("poker-ai.gameId"));
   expect(gameB).toBeTruthy();
   expect(gameB).not.toBe(gameA);
@@ -48,9 +48,20 @@ test("rejects another anonymous owner on every Stage B game endpoint", async ({ 
       turnId: "foreign-turn",
       expectedVersion: 1,
       requestId: "foreign-decision",
+      aiEpoch: 1,
     },
   });
   expect(decision.status()).toBe(404);
+
+  const mode = await pageB.request.post("/api/ai/mode", {
+    data: {
+      gameId: gameA,
+      expectedVersion: 1,
+      requestId: "foreign-mode",
+      operation: "enable",
+    },
+  });
+  expect(mode.status()).toBe(404);
 
   await contextA.close();
   await contextB.close();
