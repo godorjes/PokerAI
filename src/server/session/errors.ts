@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "INVALID_AMOUNT"
   | "HAND_COMPLETE"
   | "REBUY_REQUIRED"
+  | "INSIGHT_NOT_FOUND"
   | "IDEMPOTENCY_CONFLICT"
   | "FORBIDDEN"
   | "INTERNAL";

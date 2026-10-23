@@ -7,6 +7,7 @@ import type {
   TopUpEvent,
 } from "@/shared/api";
 import type { PlayerId, SeatId } from "@/shared/contracts";
+import type { PublicActionSnapshot } from "@/server/insight/types";
 import type { AsyncMutex } from "./mutex";
 
 export interface LedgerEntry {
@@ -79,5 +80,6 @@ export interface GameSession {
   createdAt: number;
   lastSeenAt: number;
   readonly requestLedger: Map<string, LedgerEntry>;
+  readonly publicActionSnapshots: Map<string, PublicActionSnapshot>;
   readonly topUps: TopUpEvent[];
 }

@@ -6,6 +6,18 @@ export type GamePhase = "playing" | "settled";
 export type AiMode = "disabled" | "enabled";
 export type AiDecisionSource = "deepseek" | "local_no_key" | "local_fallback";
 
+export interface PublicInsightResponse {
+  readonly actionEventId: string;
+  readonly handId: string;
+  readonly seat: SeatId;
+  readonly playerId: PlayerId;
+  readonly action: ActionName;
+  readonly amountTo: number | null;
+  readonly street: string;
+  readonly generatedBy: "template";
+  readonly text: string;
+}
+
 export interface AiTokenUsage {
   readonly promptTokens: number;
   readonly completionTokens: number;

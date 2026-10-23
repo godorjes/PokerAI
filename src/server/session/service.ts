@@ -5,6 +5,8 @@ import { decideLocalAction } from "@/server/bot-strategy/local";
 import { botStyleForSeat } from "@/server/bot-strategy/styles";
 import { HttpDeepSeekGateway } from "@/server/ai/http-gateway";
 import { buildBotDecisionInput, type BotDecisionInput } from "@/server/ai/bot-input";
+import { capturePublicActionSnapshot } from "@/server/insight/capture";
+import { buildPublicInsight } from "@/server/insight/template";
 import {
   DeepSeekGatewayError,
   type AiGateway,
@@ -24,6 +26,7 @@ import type {
   GameActionRequest,
   GameStateResponse,
   NextHandRequest,
+  PublicInsightResponse,
   TopUpEvent,
 } from "@/shared/api";
 import { ApiError } from "./errors";
@@ -92,6 +95,20 @@ export class GameService {
 
   get(ownerId: string, gameId: string): GameStateResponse {
     return this.buildState(this.store.get(ownerId, gameId));
+  }
+
+  getInsight(
+    ownerId: string,
+    gameId: string,
+    handId: string,
+    actionEventId: string,
+  ): PublicInsightResponse {
+    const session = this.store.get(ownerId, gameId);
+    const snapshot = session.publicActionSnapshots.get(actionEventId);
+    if (!snapshot || snapshot.handId !== handId || session.table.handId !== handId) {
+      throw new ApiError(404, "INSIGHT_NOT_FOUND", "Public action insight not found");
+    }
+    return buildPublicInsight(snapshot);
   }
 
   async testConnection(
@@ -300,7 +317,7 @@ export class GameService {
       if (suggestion) {
         try {
           const validated = validateSuggestionAgainstInput(reservation.input, suggestion);
-          session.table.act(pending.actorSeat, validated);
+          this.applyBotAction(session, pending.actorSeat, validated);
           action = validated;
           source = "deepseek";
           usage = suggestion.usage ?? null;
@@ -384,6 +401,7 @@ export class GameService {
 
     session.pendingDecision = null;
     session.lastDecision = null;
+    session.publicActionSnapshots.clear();
     session.stateVersion += 1;
     session.topUps.push(...topUps);
     if (session.topUps.length > 20) session.topUps.splice(0, session.topUps.length - 20);
@@ -457,10 +475,26 @@ export class GameService {
     };
   }
 
+  private applyBotAction(
+    session: GameSession,
+    actor: SeatId,
+    action: ActionInput,
+  ): ReturnType<PokerTable["act"]> {
+    const before = session.table.publicView(null);
+    const result = session.table.act(actor, action);
+    const snapshot = capturePublicActionSnapshot(before, result.event);
+    session.publicActionSnapshots.set(snapshot.actionEventId, snapshot);
+    if (session.publicActionSnapshots.size > 200) {
+      const oldest = session.publicActionSnapshots.keys().next().value;
+      if (oldest !== undefined) session.publicActionSnapshots.delete(oldest);
+    }
+    return result;
+  }
+
   private applyLocalAction(session: GameSession, actor: SeatId): ActionInput {
     try {
       const action = decideLocalAction(session.table.botView(actor));
-      session.table.act(actor, action);
+      this.applyBotAction(session, actor, action);
       return action;
     } catch (error) {
       session.pendingDecision = null;

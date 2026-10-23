@@ -11,6 +11,7 @@ import {
   type GameActionRequest,
   type GameStateResponse,
   type NextHandRequest,
+  type PublicInsightResponse,
 } from "@/shared/api";
 import type {
   ActionName,
@@ -181,11 +182,13 @@ function Seat({
   player,
   table,
   isActing,
+  onInsight,
 }: {
   seat: SeatId;
   player: PublicPlayerView;
   table: PublicTableView;
   isActing: boolean;
+  onInsight?: (actionEventId: string) => void;
 }) {
   const badge = seatBadge(seat, table);
   const isHuman = seat === 0;
@@ -253,11 +256,22 @@ function Seat({
           ) : null}
         </div>
 
-        {latest ? (
-          <div className="mt-1 truncate text-[10px] text-white/45">{actionText(latest)}</div>
-        ) : (
-          <div className="mt-1 text-[10px] text-white/30">尚未行动</div>
-        )}
+        <div className="mt-1 flex items-center justify-between gap-1">
+          {latest ? (
+            <div className="truncate text-[10px] text-white/45">{actionText(latest)}</div>
+          ) : (
+            <div className="text-[10px] text-white/30">尚未行动</div>
+          )}
+          {!isHuman && latest && latest.type !== "uncalled_return" ? (
+            <button
+              type="button"
+              onClick={() => onInsight?.(latest.eventId)}
+              className="shrink-0 rounded border border-[#8ec5ff]/25 px-1.5 py-0.5 text-[9px] text-[#8ec5ff]/85 hover:bg-[#8ec5ff]/10"
+            >
+              思路
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -349,6 +363,8 @@ export default function HomePage() {
   const [keyMessage, setKeyMessage] = useState<string | null>(null);
   const [keyBusy, setKeyBusy] = useState(false);
   const [modeBusy, setModeBusy] = useState(false);
+  const [insight, setInsight] = useState<PublicInsightResponse | null>(null);
+  const [insightBusy, setInsightBusy] = useState(false);
   const booted = useRef(false);
   const botGuard = useRef<string | null>(null);
   const modeInFlight = useRef(false);
@@ -381,6 +397,7 @@ export default function HomePage() {
         });
         localStorage.setItem(STORAGE_KEY, data.gameId);
         botGuard.current = null;
+        setInsight(null);
         setGame(data);
         setNotice(restart ? "已创建新牌桌" : "牌桌已创建");
       } catch (caught) {
@@ -433,6 +450,27 @@ export default function HomePage() {
     const suggested = legal.minRaiseTo ?? legal.minBetTo ?? legal.maxTo;
     setAmount(suggested > 0 ? String(suggested) : "");
   }, [game?.gameId, game?.turnId]);
+
+  const openInsight = useCallback(
+    async (actionEventId: string) => {
+      if (!game) return;
+      setInsightBusy(true);
+      setError(null);
+      try {
+        const data = await api<PublicInsightResponse>(
+          `/api/ai/insight?gameId=${encodeURIComponent(game.gameId)}` +
+            `&handId=${encodeURIComponent(game.handId)}` +
+            `&actionEventId=${encodeURIComponent(actionEventId)}`,
+        );
+        setInsight(data);
+      } catch (caught) {
+        reportError(caught);
+      } finally {
+        setInsightBusy(false);
+      }
+    },
+    [game, reportError],
+  );
 
   const changeAiMode = useCallback(
     async (operation: AiModeOperation): Promise<boolean> => {
@@ -668,6 +706,7 @@ export default function HomePage() {
         method: "POST",
         body: JSON.stringify(request),
       });
+      setInsight(null);
       setGame(data);
       setNotice(game.rebuyRequired ? "已补充 1,000 虚拟筹码" : "下一手已开始");
     } catch (caught) {
@@ -726,7 +765,7 @@ export default function HomePage() {
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#f4c76b]">
-            Poker AI · Stage D
+            Poker AI · Stage E
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
             五人桌 · 本地 / 智能机器人
@@ -825,6 +864,7 @@ export default function HomePage() {
               player={player}
               table={table}
               isActing={table.actionToSeat === player.seat}
+              onInsight={(eventId) => void openInsight(eventId)}
             />
           ))}
         </section>
@@ -1080,13 +1120,53 @@ export default function HomePage() {
           <section className="rounded-2xl border border-white/10 bg-black/15 p-4 text-[10px] leading-5 text-white/40">
             <div className="font-semibold text-white/60">当前边界</div>
             <p className="mt-1">
-              阶段 D 已接入四牌风模型决策、非思考模式、输出预算、有限重试、校验与用量统计； 真实 API
-              仍需用户提供 Key 后联调。刷新依赖同一 Node 进程与未过期会话；
-              服务端重启会要求重新开桌。
+              阶段 E 提供公开行动解读，不代表真实手牌或完整内部决策理由；真实 API 仍需用户提供 Key
+              后联调。刷新依赖同一 Node 进程与未过期会话； 服务端重启会要求重新开桌。
             </p>
           </section>
         </aside>
       </div>
+
+      {insightBusy ? (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full border border-[#8ec5ff]/30 bg-[#0a2334] px-3 py-1.5 text-[10px] text-[#8ec5ff]">
+          正在加载公开解读…
+        </div>
+      ) : null}
+
+      {insight ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="insight-title"
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-[#8ec5ff]/25 bg-[#0b221c] p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="insight-title" className="text-base font-bold text-[#f7f2e7]">
+                  公开行动解读
+                </h2>
+                <p className="mt-1 text-[10px] leading-4 text-white/45">
+                  基于公开信息的行动解读，不代表真实手牌或完整内部决策理由。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInsight(null)}
+                className="rounded-lg border border-white/15 px-2 py-1 text-[10px] text-white/60 hover:bg-white/5"
+              >
+                关闭
+              </button>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-white/80">{insight.text}</p>
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-3 text-[9px] text-white/30">
+              <span>绑定动作：{insight.actionEventId}</span>
+              <span>· {insight.street}</span>
+              <span>· 模板生成</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

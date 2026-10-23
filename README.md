@@ -1,6 +1,6 @@
 # Poker AI V3.2
 
-Server-authoritative five-seat no-limit Texas Hold'em. The current repository implements Stage A rule contracts, the Stage B playable table, Stage C BYOK/mode/pending control, and the Stage D four-bot model-decision pipeline. Stage D is verified offline; a real DeepSeek call has not been made without a user Key and budget authorization.
+Server-authoritative five-seat no-limit Texas Hold'em. The repository implements Stage A rule contracts, the Stage B playable table, Stage C BYOK/mode/pending control, the Stage D four-bot model-decision pipeline, and Stage E public action insight plus delivery checks. Stage D is verified offline; a real DeepSeek call has not been made without a user Key and budget authorization.
 
 ## Requirements
 
@@ -46,8 +46,21 @@ pnpm test:browser   # requires the dev server at 127.0.0.1:3000
 - Key test/clear/rotate, `aiEpoch`, PendingDecision, duplicate-turn and stale-epoch control.
 - Four bot styles, private-safe decision DTO, JSON/legal/amount validation, local fallback, source tags and token/usage stats.
 - A01/A02/V01 are covered by controlled model doubles; Stage C in-flight/isolation tests are retained.
+- Public “思路” insight is a server template bound to a submitted actionEventId; it uses only an action-time public snapshot and never calls a model.
+- Stage E browser checks cover insight, mobile bet controls, refresh/new-tab sessionStorage, and expired-session messaging.
 - **Real DeepSeek API remains unverified** until the user supplies a Key and an explicit small request budget.
 - No account, database, or real-player multiplayer.
+
+## Deployment
+
+Local production-style start:
+
+```bash
+pnpm build
+pnpm start -- -H 127.0.0.1 -p 3000
+```
+
+The app must run as **one Node process/one instance**. Sessions are in-memory and disappear on restart. See [docs/deployment.md](docs/deployment.md) for Key/cost, proxy, security and limitation notes. Public deployment is not part of this local delivery.
 
 ## API surface
 
@@ -59,6 +72,7 @@ POST /api/game/next
 POST /api/ai/test
 POST /api/ai/mode
 POST /api/ai/decision
+GET  /api/ai/insight
 ```
 
 The DeepSeek destination is fixed to `https://api.deepseek.com`; the Key is never stored in the game session, URL, body, or cache.
@@ -72,4 +86,7 @@ See:
 - `docs/plans/stage-b-report.md`
 - `docs/plans/stage-c-report.md`
 - `docs/plans/stage-d-report.md`
+- `docs/plans/stage-e-report.md`
+- `docs/acceptance-matrix.md`
+- `docs/deployment.md`
 - `docs/progress.md`

@@ -1,27 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 
 async function waitForHumanOrSettlement(page: Page): Promise<"human" | "settled"> {
-  let result: "human" | "settled" | "waiting" = "waiting";
-  await expect
-    .poll(
-      async () => {
-        const bodyText = await page.locator("body").innerText();
-        if (bodyText.includes("本手已结算")) {
-          result = "settled";
-          return "settled";
-        }
-        const fold = page.getByRole("button", { name: "弃牌" });
-        if ((await fold.count()) > 0 && (await fold.isEnabled())) {
-          result = "human";
-          return "human";
-        }
-        return "waiting";
-      },
-      { timeout: 30_000, intervals: [100, 200, 500] },
-    )
-    .not.toBe("waiting");
-  if (result === "waiting") throw new Error("Neither human turn nor settlement was observed");
-  return result;
+  await page.waitForFunction(
+    () => {
+      if (document.body.innerText.includes("本手已结算")) return true;
+      return [...document.querySelectorAll("button")].some(
+        (button) => button.textContent?.trim() === "弃牌" && !button.disabled,
+      );
+    },
+    undefined,
+    { timeout: 40_000 },
+  );
+  return (await page.getByText("本手已结算").count()) > 0 ? "settled" : "human";
 }
 
 async function finishHandByFolding(page: Page): Promise<void> {

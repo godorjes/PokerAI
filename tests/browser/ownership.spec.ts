@@ -63,6 +63,11 @@ test("rejects another anonymous owner on every current game/AI endpoint", async 
   });
   expect(mode.status()).toBe(404);
 
+  const insight = await pageB.request.get(
+    `/api/ai/insight?gameId=${gameA}&handId=foreign-hand&actionEventId=foreign-event`,
+  );
+  expect(insight.status()).toBe(404);
+
   await contextA.close();
   await contextB.close();
 });

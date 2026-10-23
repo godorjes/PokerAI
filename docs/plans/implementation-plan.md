@@ -652,6 +652,8 @@ D 阶段不新增公开业务接口，复用 C 的 `/api/ai/decision` 与 `/api/
 - 23 项验收矩阵已有逐项记录。
 - 可运行的单实例环境与浏览器。
 
+> 执行记录（2026-10-22）：Stage E 本地交付完成。V02/S01/S02 通过；K02 刷新与新标签页实测通过，浏览器“恢复关闭标签页”为部分通过。真实 DeepSeek API 仍为 0 次调用、未联调。详见 `docs/plans/stage-e-report.md` 与 `docs/acceptance-matrix.md`。
+
 ### 9.2 产物
 
 1. 思路入口与“基于公开信息的行动解读”说明，绑定已提交 `actionEventId`。

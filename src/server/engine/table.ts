@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomInt } from "node:crypto";
 import {
   ActionType,
   IllegalActionError,
@@ -220,11 +220,14 @@ function publicPlayer(
   };
 }
 
-function findActionRecord(state: GameState, seat: SeatId): ActionRecord | undefined {
+function findActionRecord(
+  state: GameState,
+  seat: SeatId,
+): { record: ActionRecord; index: number } | undefined {
   for (let index = state.actionHistory.length - 1; index >= 0; index -= 1) {
     const record = state.actionHistory[index];
     if (record?.seat === seat && record.action.type !== ActionType.UNCALLED_BET_RETURNED) {
-      return record;
+      return { record, index };
     }
   }
   return undefined;
@@ -320,7 +323,6 @@ export class PokerTable {
 
     const engineAction = toEngineAction(before, seat, input);
     const turnId = `${before.handId}:${before.actionHistory.length}`;
-    const eventId = randomUUID();
 
     try {
       this.engine.act(engineAction);
@@ -345,15 +347,18 @@ export class PokerTable {
     }
 
     const after = this.engine.state;
-    const record = findActionRecord(after, seat);
-    if (!record) {
+    const found = findActionRecord(after, seat);
+    if (!found) {
       throw new TableError("INTERNAL", "Engine committed an action without a history record");
     }
+    const { record, index: actionIndex } = found;
 
     const resultingStack = record.resultingStack;
     const chipsMoved = Math.max(0, beforePlayer.stack - resultingStack);
     const event: ActionEvent = {
-      eventId,
+      // Same stable id exposed by PublicActionView.actions, so insight callers
+      // can bind to an already submitted public action rather than a private id.
+      eventId: `${before.handId}:history:${actionIndex}`,
       handId: before.handId,
       turnId,
       playerId: toPlayerId(beforePlayer.id),

@@ -53,6 +53,7 @@ export class GameSessionStore {
       createdAt: now,
       lastSeenAt: now,
       requestLedger: new Map(),
+      publicActionSnapshots: new Map(),
       topUps: [],
     };
     this.sessions.set(session.gameId, session);
